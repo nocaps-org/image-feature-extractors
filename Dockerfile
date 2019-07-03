@@ -1,0 +1,85 @@
+FROM nvidia/cuda:8.0-cudnn7-devel-ubuntu16.04
+
+ARG python=3.5
+ENV PYTHON_VERSION=${python}
+ENV NCCL_VERSION=2.3.5-2+cuda8.0
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  build-essential \
+  cmake \
+  curl \
+  ca-certificates \
+  libjpeg-dev \
+  wget \
+  libatlas-base-dev \
+  libboost-all-dev \
+  libgflags-dev \
+  libgoogle-glog-dev \
+  libhdf5-serial-dev \
+  libleveldb-dev \
+  liblmdb-dev \
+  libnccl2=${NCCL_VERSION} \
+  libnccl-dev=${NCCL_VERSION} \
+  libopencv-dev \
+  libprotobuf-dev \
+  libsnappy-dev \
+  protobuf-compiler \
+  python${PYTHON_VERSION} \
+  python${PYTHON_VERSION}-dev \
+  libpng-dev
+
+RUN curl -O https://bootstrap.pypa.io/get-pip.py && \
+  python${PYTHON_VERSION} get-pip.py && \
+  rm get-pip.py
+
+RUN ln -sf /usr/bin/python3.5 /usr/bin/python
+ENV LD_LIBRARY_PATH $LD_LIBRARY_PATH:/usr/lib/x86_64-linux-gnu
+
+ENV CAFFE_ROOT=/opt/caffe
+WORKDIR $CAFFE_ROOT
+COPY ./caffe .
+RUN cp Makefile.config.example Makefile.config
+RUN for req in $(cat python/requirements.txt) pydot; do pip install $req; done 
+
+RUN make clean && make  all -j "$(nproc)" && \
+  make pycaffe
+
+RUN make test -j "$(nproc)" 
+
+ENV PYCAFFE_ROOT $CAFFE_ROOT/python
+ENV PYTHONPATH $PYCAFFE_ROOT:$PYTHONPATH
+ENV PATH $CAFFE_ROOT/build/tools:$PYCAFFE_ROOT:$PATH
+RUN echo "$CAFFE_ROOT/build/lib" >> /etc/ld.so.conf.d/caffe.conf && ldconfig
+
+ARG PYTHON_BASEDEPS="build-essential python-pip"
+ARG PYTHON_BUILDDEPS="libbz2-dev \
+  libc6-dev \
+  libgdbm-dev \
+  libncursesw5-dev \
+  libreadline-gplv2-dev \
+  libsqlite3-dev \
+  libssl-dev \
+  tk-dev"
+
+# basic packages useful inside the environment
+RUN apt-get update && \
+  apt-get install -y gcc g++ make && \
+  apt-get install -y nano ${PYTHON_BASEDEPS} ${PYTHON_BUILDDEPS}
+
+# # pip packages
+RUN pip install --trusted-host pypi.python.org \
+  Cython \
+  h5py \
+  ipython \
+  scipy \
+  tqdm \
+  cld2-cffi \
+  jupyterlab \
+  easydict \
+  opencv-python
+
+COPY . /app
+ENV PATH /app:/app/lib:$PATH
+WORKDIR /app/lib
+RUN make all
+WORKDIR /app

@@ -9,12 +9,13 @@ import caffe
 import numpy as np
 import yaml
 from fast_rcnn.config import cfg
-from generate_anchors import generate_anchors
 from fast_rcnn.bbox_transform import bbox_transform_inv, clip_boxes
 from fast_rcnn.nms_wrapper import nms
+from .generate_anchors import generate_anchors
 
 DEBUG = False
 DEBUG_SHAPE = False
+
 
 class ProposalLayer(caffe.Layer):
     """
@@ -26,15 +27,15 @@ class ProposalLayer(caffe.Layer):
         # parse the layer parameter string, which must be valid YAML
         layer_params = yaml.load(self.param_str)
 
-        self._feat_stride = layer_params['feat_stride']
-        anchor_scales = layer_params.get('scales', (8, 16, 32))
+        self._feat_stride = layer_params["feat_stride"]
+        anchor_scales = layer_params.get("scales", (8, 16, 32))
         self._anchors = generate_anchors(scales=np.array(anchor_scales))
         self._num_anchors = self._anchors.shape[0]
 
         if DEBUG:
-            print 'feat_stride: {}'.format(self._feat_stride)
-            print 'anchors:'
-            print self._anchors
+            print("feat_stride: {}".format(self._feat_stride))
+            print("anchors:")
+            print(self._anchors)
 
         # rois blob: holds R regions of interest, each is a 5-tuple
         # (n, x1, y1, x2, y2) specifying an image batch index n and a
@@ -59,37 +60,39 @@ class ProposalLayer(caffe.Layer):
         # take after_nms_topN proposals after NMS
         # return the top proposals (-> RoIs top, scores top)
 
-        assert bottom[0].data.shape[0] == 1, \
-            'Only single item batches are supported'
+        assert bottom[0].data.shape[0] == 1, "Only single item batches are supported"
 
-        cfg_key = str('TRAIN' if self.phase == 0 else 'TEST') # either 'TRAIN' or 'TEST'
-        pre_nms_topN  = cfg[cfg_key].RPN_PRE_NMS_TOP_N
+        cfg_key = str(
+            "TRAIN" if self.phase == 0 else "TEST"
+        )  # either 'TRAIN' or 'TEST'
+        pre_nms_topN = cfg[cfg_key].RPN_PRE_NMS_TOP_N
         post_nms_topN = cfg[cfg_key].RPN_POST_NMS_TOP_N
-        nms_thresh    = cfg[cfg_key].RPN_NMS_THRESH
-        min_size      = cfg[cfg_key].RPN_MIN_SIZE
+        nms_thresh = cfg[cfg_key].RPN_NMS_THRESH
+        min_size = cfg[cfg_key].RPN_MIN_SIZE
 
         # the first set of _num_anchors channels are bg probs
         # the second set are the fg probs, which we want
-        scores = bottom[0].data[:, self._num_anchors:, :, :]
+        scores = bottom[0].data[:, self._num_anchors :, :, :]
         bbox_deltas = bottom[1].data
         im_info = bottom[2].data[0, :]
 
         if DEBUG:
-            print 'im_size: ({}, {})'.format(im_info[0], im_info[1])
-            print 'scale: {}'.format(im_info[2])
+            print("im_size: ({}, {})".format(im_info[0], im_info[1]))
+            print("scale: {}".format(im_info[2]))
 
         # 1. Generate proposals from bbox deltas and shifted anchors
         height, width = scores.shape[-2:]
 
         if DEBUG:
-            print 'score map size: {}'.format(scores.shape)
+            print("score map size: {}".format(scores.shape))
 
         # Enumerate all shifts
         shift_x = np.arange(0, width) * self._feat_stride
         shift_y = np.arange(0, height) * self._feat_stride
         shift_x, shift_y = np.meshgrid(shift_x, shift_y)
-        shifts = np.vstack((shift_x.ravel(), shift_y.ravel(),
-                            shift_x.ravel(), shift_y.ravel())).transpose()
+        shifts = np.vstack(
+            (shift_x.ravel(), shift_y.ravel(), shift_x.ravel(), shift_y.ravel())
+        ).transpose()
 
         # Enumerate all shifted anchors:
         #
@@ -99,8 +102,9 @@ class ProposalLayer(caffe.Layer):
         # reshape to (K*A, 4) shifted anchors
         A = self._num_anchors
         K = shifts.shape[0]
-        anchors = self._anchors.reshape((1, A, 4)) + \
-                  shifts.reshape((1, K, 4)).transpose((1, 0, 2))
+        anchors = self._anchors.reshape((1, A, 4)) + shifts.reshape(
+            (1, K, 4)
+        ).transpose((1, 0, 2))
         anchors = anchors.reshape((K * A, 4))
 
         # Transpose and reshape predicted bbox transformations to get them
@@ -111,7 +115,7 @@ class ProposalLayer(caffe.Layer):
         # reshape to (1 * H * W * A, 4) where rows are ordered by (h, w, a)
         # in slowest to fastest order
         bbox_deltas = bbox_deltas.transpose((0, 2, 3, 1)).reshape((-1, 4))
-        if cfg_key == 'TRAIN' and cfg.TRAIN.RPN_NORMALIZE_TARGETS:
+        if cfg_key == "TRAIN" and cfg.TRAIN.RPN_NORMALIZE_TARGETS:
             bbox_deltas *= cfg.TRAIN.RPN_NORMALIZE_STDS
             bbox_deltas += cfg.TRAIN.RPN_NORMALIZE_MEANS
 
@@ -160,14 +164,14 @@ class ProposalLayer(caffe.Layer):
         top[0].reshape(*(blob.shape))
         top[0].data[...] = blob
         if DEBUG_SHAPE:
-            print 'ProposalLayer top[0] size: {}'.format(top[0].data.shape)
+            print("ProposalLayer top[0] size: {}".format(top[0].data.shape))
 
         # [Optional] output scores blob
         if len(top) > 1:
             top[1].reshape(*(scores.shape))
             top[1].data[...] = scores
             if DEBUG_SHAPE:
-                print 'ProposalLayer top[0] size: {}'.format(top[0].data.shape)
+                print("ProposalLayer top[0] size: {}".format(top[0].data.shape))
 
     def backward(self, top, propagate_down, bottom):
         """This layer does not propagate gradients."""
@@ -176,6 +180,7 @@ class ProposalLayer(caffe.Layer):
     def reshape(self, bottom, top):
         """Reshaping happens during the call to forward."""
         pass
+
 
 def _filter_boxes(boxes, min_size):
     """Remove all boxes with any side smaller than min_size."""

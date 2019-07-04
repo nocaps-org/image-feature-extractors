@@ -79,7 +79,6 @@ RUN pip install --trusted-host pypi.python.org \
   opencv-python
 
 COPY . /app
-ENV PATH /app:/app/lib:$PATH
 WORKDIR /app/lib
-RUN make all
+RUN python setup.py build_ext && python setup.py develop
 WORKDIR /app

@@ -243,7 +243,7 @@ if __name__ == "__main__":
         classes_dset = output_h5.create_dataset(
             "classes",
             (len(image_ids),),
-            h5py.special_dtype(vlen=np.uint8)
+            h5py.special_dtype(vlen=np.uint32)
         )
 
     caffe.init_log()

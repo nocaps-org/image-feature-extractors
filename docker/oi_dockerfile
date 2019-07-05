@@ -1,0 +1,30 @@
+from tensorflow/tensorflow:1.12.0-gpu-py3
+
+# Apt dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+    git \
+    python-pil \
+    python-lxml \
+    python-tk \
+    wget
+
+# Pip dependencies
+RUN pip install --user Cython && \
+    pip install --user contextlib2 && \
+    pip install --user jupyter && \
+    pip install --user matplotlib
+
+WORKDIR /workspace
+RUN git clone https://www.github.com/tensorflow/models tf_models
+
+WORKDIR /workspace/tf_models
+RUN cd research && \
+    wget -O protobuf.zip https://github.com/google/protobuf/releases/download/v3.0.0/protoc-3.0.0-linux-x86_64.zip && \
+    unzip protobuf.zip && \
+    ./bin/protoc object_detection/protos/*.proto --python_out=.
+
+ENV PYTHONPATH /workspace/tf_models/research:/workspace/tf_models/research/slim
+
+WORKDIR /workspace/tf_models
+EXPOSE 8008

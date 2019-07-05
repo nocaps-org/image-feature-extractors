@@ -1,0 +1,155 @@
+import argparse
+import json
+import os
+
+import numpy as np
+from PIL import Image
+import tensorflow as tf
+from tqdm import tqdm
+
+
+parser = argparse.ArgumentParser()
+
+parser.add_argument(
+    "--frozen-inference-pbpath",
+    default="models/open_images_train_tensorflow_detection_api/"
+    "faster_rcnn_inception_resnet_v2_atrous_oid_v4_2018/frozen_inference_graph.pb",
+    help="Path to frozen inference graph of pre-trained detector.",
+)
+parser.add_argument(
+    "--images", help="Path to a directory containing images for a particular split."
+)
+parser.add_argument(
+    "--annotations",
+    help="Path to annotations JSON file (in COCO format) containing image info.",
+)
+parser.add_argument(
+    "--boxes-per-image",
+    type=int,
+    default=18,
+    help="Number of detected bounding boxes per image.",
+)
+parser.add_argument(
+    "--output",
+    default="detections.json",
+    help="Path to save the output JSON (in COCO format) with detected boxes.",
+)
+
+
+def _image_ids(annotations_path: str) -> List[Tuple[int, str]]:
+    r"""
+    Given path to an annotation file in COCO format, return ``(image_id, filename)`` tuples.
+
+    Parameters
+    ----------
+    annotations_path: str
+        Path to an annotation file in COCO format. Must contain "images" key.
+
+    Returns
+    -------
+    List[Tuple[int, str]]
+        List of ``(image_id, filename)`` tuples.
+    """
+
+    image_annotations = json.load(open(annotations_path))["images"]
+    image_ids = [(im["id"], im["file_name"]) for im in image_annotations]
+
+    image_ids = sorted(image_ids, key=lambda k: k[0])
+    return image_ids
+
+
+if __name__ == "__main__":
+    _A = parser.parse_args()
+
+    # List of tuples of image IDs and their file names.
+    image_ids = _image_ids(_A.annotations)
+
+    # Populate this list with all the detected boxes (in COCO format).
+    output_detections: List[Dict[str, Any]] = []
+
+    # --------------------------------------------------------------------------------------------
+    # Load Faster-RCNN frozen inference graph. Contains both, architecture definition and weights.
+    rcnn_frozen_inference_graph = tf.Graph()
+
+    with rcnn_frozen_inference_graph.as_default():
+        rcnn_frozen_inference_graphdef = tf.GraphDef()
+
+        with tf.gfile.GFile(_A.frozen_inference_pbpath, "rb") as f:
+            rcnn_frozen_inference_graphdef.ParseFromString(f.read())
+            tf.import_graph_def(rcnn_frozen_inference_graphdef, name="")
+
+        # Get handles to input and output tensors.
+        image_tensor = tf.get_default_graph().get_tensor_by_name("image_tensor:0")
+        detection_outputs = {
+            key: tf.get_default_graph().get_tensor_by_name(key + ":0")
+            for key in [
+                "num_detections",
+                "detection_boxes",
+                "detection_scores",
+                "detection_classes",
+            ]
+        }
+    # --------------------------------------------------------------------------------------------
+
+    # --------------------------------------------------------------------------------------------
+    # Run inference on all images and save predicted boxes, classes and confidence scores.
+    with rcnn_frozen_inference_graph.as_default():
+        session = tf.Session()
+
+        for image_id, image_filename in enumerate(tqdm(image_ids)):
+            image_path = os.path.join(_A.images, image_filename)
+            image = Image.open(image_path)
+            image_width, image_height = image.size
+
+            image_ndarray = np.asarray(image)
+
+            if len(image_ndarray.shape) == 2:
+                # Add RGB channel for single-channel grayscale images.
+                image_ndarray = np.expand_dims(image_ndarray, axis=-1)
+                image_ndarray = np.repeat(image_ndarray, 3, axis=-1)
+            elif image_ndarray.shape[2] == 4:
+                # Drop alpha channel from RGB-A images.
+                image_ndarray = image_ndarray[:, :, :3]
+
+            # Run inference on image (add batch dimension first).
+            output_dict = session.run(
+                detection_outputs,
+                feed_dict={image_tensor: np.expand_dims(image_ndarray, 0)},
+            )
+
+            # Remove the batch dimension and cast outputs to appropriate types.
+            # fmt: off
+            output_dict["detection_boxes"] = output_dict["detection_boxes"][0]
+            output_dict["detection_classes"] = output_dict["detection_classes"][0]
+            output_dict["detection_scores"] = output_dict["detection_scores"][0]
+
+            # Boxes are of the form [Y1, X1, Y2, X2] in [0, 1]. Convert to [X1, Y1, X2, Y2].
+            # Also, un-normalize by image width and height.
+            output_dict["detection_boxes"][:, 0], output_dict["detection_boxes"][:, 1] = \
+                output_dict["detection_boxes"][:, 1], output_dict["detection_boxes"][:, 0]
+
+            output_dict["detection_boxes"][:, 2], output_dict["detection_boxes"][:, 3] = \
+                output_dict["detection_boxes"][:, 3], output_dict["detection_boxes"][:, 2],
+
+            output_dict["detection_boxes"][:, 0] *= image_width
+            output_dict["detection_boxes"][:, 1] *= image_height
+            output_dict["detection_boxes"][:, 2] *= image_width
+            output_dict["detection_boxes"][:, 3] *= image_height
+            # fmt: on
+
+            # Populate the output detections list with these detections.
+            # Boxes (and corresponding classes) list is sorted by decreasing confidence score.
+            for box, clss, score in zip(
+                output_dict["detection_boxes"],
+                output_dict["detection_classes"],
+                output_dict["detection_scores"],
+            ):
+                output_detections.append(
+                    {
+                        "image_id": image_id,
+                        "category_id": int(clss),
+                        "bbox": list(box),
+                        "score": float(score),
+                    }
+                )
+    # --------------------------------------------------------------------------------------------

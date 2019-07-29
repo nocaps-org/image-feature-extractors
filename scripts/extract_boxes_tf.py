@@ -1,6 +1,7 @@
 import argparse
 import json
 import os
+from typing import List, Tuple
 
 import numpy as np
 from PIL import Image
@@ -11,7 +12,7 @@ from tqdm import tqdm
 parser = argparse.ArgumentParser()
 
 parser.add_argument(
-    "--frozen-inference-pbpath",
+    "--graph",
     default="models/open_images_train_tensorflow_detection_api/"
     "faster_rcnn_inception_resnet_v2_atrous_oid_v4_2018/frozen_inference_graph.pb",
     help="Path to frozen inference graph of pre-trained detector.",
@@ -64,8 +65,8 @@ if __name__ == "__main__":
     # List of tuples of image IDs and their file names.
     image_ids = _image_ids(_A.annotations)
 
-    # Populate this list with all the detected boxes (in COCO format).
-    output_detections: List[Dict[str, Any]] = []
+    # Populate this dict with all the detected boxes (in COCO format).
+    output_coco_format = {"categories": [], "images": [], "annotations": []}
 
     # --------------------------------------------------------------------------------------------
     # Load Faster-RCNN frozen inference graph. Contains both, architecture definition and weights.
@@ -74,7 +75,7 @@ if __name__ == "__main__":
     with rcnn_frozen_inference_graph.as_default():
         rcnn_frozen_inference_graphdef = tf.GraphDef()
 
-        with tf.gfile.GFile(_A.frozen_inference_pbpath, "rb") as f:
+        with tf.gfile.GFile(_A.graph, "rb") as f:
             rcnn_frozen_inference_graphdef.ParseFromString(f.read())
             tf.import_graph_def(rcnn_frozen_inference_graphdef, name="")
 
@@ -96,11 +97,11 @@ if __name__ == "__main__":
     with rcnn_frozen_inference_graph.as_default():
         session = tf.Session()
 
-        for image_id, image_filename in enumerate(tqdm(image_ids)):
+        for image_id, image_filename in tqdm(image_ids):
+
             image_path = os.path.join(_A.images, image_filename)
             image = Image.open(image_path)
             image_width, image_height = image.size
-
             image_ndarray = np.asarray(image)
 
             if len(image_ndarray.shape) == 2:
@@ -137,6 +138,17 @@ if __name__ == "__main__":
             output_dict["detection_boxes"][:, 3] *= image_height
             # fmt: on
 
+            # Populate the image info in COCO format. This is just for completeness of the output
+            # detections JSON file.
+            output_coco_format["images"].append(
+                {
+                    "id": image_id,
+                    "file_name": image_filename,
+                    "height": image_height,
+                    "width": image_width,
+                }
+            )
+
             # Populate the output detections list with these detections.
             # Boxes (and corresponding classes) list is sorted by decreasing confidence score.
             for box, clss, score in zip(
@@ -144,12 +156,21 @@ if __name__ == "__main__":
                 output_dict["detection_classes"],
                 output_dict["detection_scores"],
             ):
-                output_detections.append(
-                    {
-                        "image_id": image_id,
-                        "category_id": int(clss),
-                        "bbox": list(box),
-                        "score": float(score),
-                    }
-                )
+                if sum(box) > 0:
+                    # This is not a zero-area box (padding).
+                    output_coco_format["annotations"].append(
+                        {
+                            "image_id": image_id,
+                            "category_id": int(clss),
+                            "bbox": [float(coordinate) for coordinate in box],
+                            "score": float(score),
+                        }
+                    )
     # --------------------------------------------------------------------------------------------
+
+    # Populate the (Open Images) categories field from external file, for completeness.
+    # This path is relative to $PROJECT_ROOT, so make sure to run script from there.
+    output_coco_format["categories"] = json.load(open("data/oi_categories.json"))
+
+    print("Saving output detections to {}...".format(_A.output))
+    json.dump(output_coco_format, open(_A.output, "w"))

@@ -80,5 +80,5 @@ RUN pip install --trusted-host pypi.python.org \
 
 COPY . /app
 WORKDIR /app/lib
-RUN python setup.py build_ext && python setup.py develop
+RUN python setup.py build_ext && python setup.py install
 WORKDIR /app

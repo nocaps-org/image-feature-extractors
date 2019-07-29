@@ -9,11 +9,15 @@ RUN apt-get update && \
     python-tk \
     wget
 
-# Pip dependencies
-RUN pip install --user Cython && \
-    pip install --user contextlib2 && \
-    pip install --user jupyter && \
-    pip install --user matplotlib && \
-    pip install --user tqdm
+# Pip dependencies.
+RUN pip install Cython && \
+    pip install contextlib2 && \
+    pip install h5py jupyter jupyterlab matplotlib numpy pillow tqdm
+
+# Just create a directory to dump output files.
+RUN mkdir /outputs
+
+# Expose a port for jupyter lab.
+EXPOSE 8880
 
 WORKDIR /workspace

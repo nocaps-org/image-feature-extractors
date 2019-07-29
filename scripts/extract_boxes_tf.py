@@ -32,7 +32,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--output",
-    default="detections.json",
+    default="/outputs/detections.json",
     help="Path to save the output JSON (in COCO format) with detected boxes.",
 )
 
@@ -100,17 +100,17 @@ if __name__ == "__main__":
         for image_id, image_filename in tqdm(image_ids):
 
             image_path = os.path.join(_A.images, image_filename)
-            image = Image.open(image_path)
+            image = Image.open(image_path).convert("RGB")
             image_width, image_height = image.size
-            image_ndarray = np.asarray(image)
+            image_ndarray = np.array(image)
 
-            if len(image_ndarray.shape) == 2:
-                # Add RGB channel for single-channel grayscale images.
-                image_ndarray = np.expand_dims(image_ndarray, axis=-1)
-                image_ndarray = np.repeat(image_ndarray, 3, axis=-1)
-            elif image_ndarray.shape[2] == 4:
-                # Drop alpha channel from RGB-A images.
-                image_ndarray = image_ndarray[:, :, :3]
+            #             if len(image_ndarray.shape) == 2:
+            #                 # Add RGB channel for single-channel grayscale images.
+            #                 image_ndarray = np.expand_dims(image_ndarray, axis=-1)
+            #                 image_ndarray = np.repeat(image_ndarray, 3, axis=-1)
+            #             elif image_ndarray.shape[2] == 4:
+            #                 # Drop alpha channel from RGB-A images.
+            #                 image_ndarray = image_ndarray[:, :, :3]
 
             # Run inference on image (add batch dimension first).
             output_dict = session.run(
@@ -119,24 +119,9 @@ if __name__ == "__main__":
             )
 
             # Remove the batch dimension and cast outputs to appropriate types.
-            # fmt: off
             output_dict["detection_boxes"] = output_dict["detection_boxes"][0]
             output_dict["detection_classes"] = output_dict["detection_classes"][0]
             output_dict["detection_scores"] = output_dict["detection_scores"][0]
-
-            # Boxes are of the form [Y1, X1, Y2, X2] in [0, 1]. Convert to [X1, Y1, X2, Y2].
-            # Also, un-normalize by image width and height.
-            output_dict["detection_boxes"][:, 0], output_dict["detection_boxes"][:, 1] = \
-                output_dict["detection_boxes"][:, 1], output_dict["detection_boxes"][:, 0]
-
-            output_dict["detection_boxes"][:, 2], output_dict["detection_boxes"][:, 3] = \
-                output_dict["detection_boxes"][:, 3], output_dict["detection_boxes"][:, 2],
-
-            output_dict["detection_boxes"][:, 0] *= image_width
-            output_dict["detection_boxes"][:, 1] *= image_height
-            output_dict["detection_boxes"][:, 2] *= image_width
-            output_dict["detection_boxes"][:, 3] *= image_height
-            # fmt: on
 
             # Populate the image info in COCO format. This is just for completeness of the output
             # detections JSON file.
@@ -158,6 +143,16 @@ if __name__ == "__main__":
             ):
                 if sum(box) > 0:
                     # This is not a zero-area box (padding).
+
+                    # Boxes are of the form [Y1, X1, Y2, X2] in [0, 1].
+                    # Convert to [X1, Y1, X2, Y2]. Also, un-normalize by image width and height.
+                    box = [
+                        box[1] * image_width,
+                        box[0] * image_height,
+                        box[3] * image_width,
+                        box[2] * image_height,
+                    ]
+
                     output_coco_format["annotations"].append(
                         {
                             "image_id": image_id,
@@ -166,6 +161,7 @@ if __name__ == "__main__":
                             "score": float(score),
                         }
                     )
+            if image_id == 43: break
     # --------------------------------------------------------------------------------------------
 
     # Populate the (Open Images) categories field from external file, for completeness.

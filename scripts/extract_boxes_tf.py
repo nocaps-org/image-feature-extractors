@@ -161,7 +161,6 @@ if __name__ == "__main__":
                             "score": float(score),
                         }
                     )
-            if image_id == 43: break
     # --------------------------------------------------------------------------------------------
 
     # Populate the (Open Images) categories field from external file, for completeness.

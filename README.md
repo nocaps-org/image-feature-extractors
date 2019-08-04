@@ -1,20 +1,23 @@
-Image Features Extractors for `nocaps`
-======================================
+Image Feature Extractors for `nocaps`
+=====================================
 
 This repository is a collection of scripts and Jupyter notebooks for extracting bottom-up image features required by the baseline models for `nocaps`.
 
 * [Terminology](#terminology)
 * [Setup Instructions](#setup-instructions)
 * [Extract Boxes from `OI Detector`](#extract-boxes-from-oi-detector)
+* [Extract Features from `VG Detector`](#extract-features-from-vg-detector)
+* [Visualize Bounding Boxes](#visualize-bounding-boxes)
+* [Frequently Asked Questions](#frequently-asked-questions)
 
-Pre-trained weights and some parts of this codebase are adopted from [@peteanderson80/bottom-up-attention](https://www.github.com/peteanderson80/bottom-up-attention) and [@tensorflow/models](https://www.github.com/tensorflow/models).  
+Pre-trained weights and some parts of this codebase are adopted from [@peteanderson80/bottom-up-attention][vgrepo] and [@Tesnorflow Object Detection API][oirepo].  
 If you find this code useful, please consider citing our paper and these works. Bibtex available in [CITATION.md](CITATION.md).
 
 
 Terminology
 -----------
 
-We have two baselines (Table 2 of our paper) using two different detectors for bottom-up image features and predicted boxes.
+We have two baselines (Table 2 of our paper) using two detectors for getting boxes and image features.
 
 **Baselines:**
 
@@ -24,38 +27,25 @@ We have two baselines (Table 2 of our paper) using two different detectors for b
 **Detectors:**
 
 1. `OI Detector` - trained using Open Images v4 split, from the [Tensorflow model zoo](https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/detection_model_zoo.md).
-2. `VG Detector` - trained using Visual Genome, from [@peteanderson80/bottom-up-attention](https://www.github.com/peteanderson80/bottom-up-attention).  
+2. `VG Detector` - trained using Visual Genome, from [@peteanderson80/bottom-up-attention][oirepo].  
 
-`VG Detector` is used as a source of bottom-up image features (2048-dimensional vectors) for both the baselines (and their ablations). `OI Detector` is used as a source of CBS constraints and NBT visual word candidates. Refer our paper for further details.
+`OI Detector` is used as a source of CBS constraints and NBT visual word candidates. `VG Detector` is used as a source of bottom-up image features (2048-dimensional vectors) for both the baselines (and their ablations). Refer our paper for further details.
 
 
 Setup Instructions
 ------------------
 
-Seeting up this codebase requires Docker, so install it first. We provide two separate dockerfiles, one each for both of our detectors. Also, install [nvidia-docker](https://www.github.com/nvidia/nvidia-docker), which enables usage of GPUs from inside a container.
+Setting up this codebase requires Docker, so install it first. We provide two separate dockerfiles, one each for both of our detectors. Also, install [nvidia-docker](https://www.github.com/nvidia/nvidia-docker), which enables usage of GPUs from inside a container.
 
-**Note:** Follow these two steps as per your needs. For example, if you wish to use only the `OI Detector`, you need not build the docker image for `VG Detector`.
+1. Download pre-trained models.
+    - `OI Detector`: download from [here](https://www.dropbox.com/s/uoai4xqfdx96q2c/faster_rcnn_inception_resnet_v2_atrous_oid_v4_2018.tar.gz) and un-tar it in `models` sub-directory.
+    - `VG Detector`: download from [here](https://www.dropbox.com/s/tr24q7h0zm2wnjv/resnet101_faster_rcnn_final.caffemodel) and place it in `models/vg_faster_rcnn_end2end` sub-directory.
 
-### For using `OI Detector`
-
-1. Download [pre-trained model]() and place it in `models` sub-directory.
-
-2. Build docker image:
+2. Build docker image (replace `<detector>` with `oi` or `vg` as per needs). If you wish to use only the `OI Detector`, you need not build the docker image for `VG Detector`.
 
 ```shell
 cd docker
-docker build --file oi_dockerfile --tag oi_image .
-```
-
-### For using `VG Detector`
-
-1. Download [pre-trained model](https://storage.googleapis.com/bottom-up-attention/resnet101_faster_rcnn_final.caffemodel) and place it under `models/vg_faster_rcnn_end2end` sub-directory.
-
-2. Build docker image:
-
-```shell
-cd docker
-docker build --file vg_dockerfile --tag vg_image .
+docker build --file <detector>_dockerfile --tag <detector>_image .
 ```
 
 
@@ -87,4 +77,47 @@ python3 scripts/extract_boxes_oi.py \
     --output /outputs/nocaps_val_detections.json
 ```
 
-This creates a JSON file with bounding boxes in COCO format (of instance annotations). These detections can be used to generate CBS constraints, or the bounding boxes can be used to extract 2048-d bottom-up features from `VG Detector` for NBT candidate grounding regions.
+This creates a JSON file with bounding boxes in COCO format (of instance annotations).
+
+
+Extract Features from `VG Detector`
+-----------------------------------
+
+We use `VG Detector` as a source of bottom-up image features (2048-dimensional vectors) for UpDown model and NBT. Only for the candidate grounding regions of NBT, we take boxes from `OI Detector` and use them here (instead of this detector's RPN) to get features.
+
+Launch the docker image as for `OI Detector`:
+
+```shell
+nvidia-docker run -it \
+    --name vg_container \
+    -v $PWD:/workspace \                   # attach project root as volume
+    -v /path/to/nocaps:/datasets/nocaps \  # omit this if using only coco
+    -v /path/to/coco:/datasets/coco \      # omit this if using only nocaps
+    -p 8880:8880                           # port forward for accessing jupyter notebook/lab
+    vg_image
+    /bin/bash
+```
+
+Inside the container environment, extract class-agnostic features for UpDown model and the language model of NBT with this command (example for `nocaps` val):
+
+```shell
+todo
+```
+
+Visualize Bounding Boxes
+------------------------
+
+TODO.
+
+Frequently Asked Questions
+--------------------------
+
+1. How do I train my own detector(s)?
+    - We only provide support for feature extraction and visualization (for debugging). We do not intend to add training support in this repository in the future. For training your own detector(s), use [@peteanderson80/bottom-up-detection][vgrepo] for `VG Detector` and [Tensorflow Object Detection API][oirepo] for `OI Detector`.
+
+2. Feature extraction is slow, how can I speed it up?
+    - Feature extraction for nocaps splits is reasonably fast due to a smaller split size (~5K/~10K images), COCO train2017 would take relatively longer (~118K images). Parallelizing across multiple GPUs is an alternative, but it is unfortunately not supported. Feature extraction was a one time job for our experiments, hence introducing multi-GPU support took lower priority than other things. We do welcome Pull Requests for this support!
+
+
+[vgrepo]: https://www.github.com/peteanderson80/bottom-up-attention
+[oirepo]: https://github.com/tensorflow/models/blob/master/research/object_detection

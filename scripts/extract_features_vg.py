@@ -1,7 +1,7 @@
 import argparse
 import json
 import os
-from typing import Any, Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import caffe
 import cv2
@@ -43,7 +43,7 @@ parser.add_argument(
 )
 parser.add_argument(
     "--force-boxes",
-    deault=None,
+    default=None,
     help="Path to JSON file (in COCO format) containing external boxes (instead of RPN).",
 )
 parser.add_argument(
@@ -198,6 +198,7 @@ def get_detections_from_im(
         "image_id": image_id,
         "height": height,
         "width": width,
+        "num_boxes": extracted_boxes.shape[0],
         "boxes": extracted_boxes,
         "features": extracted_features,
     }
@@ -206,6 +207,8 @@ def get_detections_from_im(
     # confidence score from this detector.
     if force_boxes is None:
         output_dict["scores"] = extracted_scores
+    
+    return output_dict
 
 
 if __name__ == "__main__":
@@ -223,6 +226,7 @@ if __name__ == "__main__":
     image_id_dset = output_h5.create_dataset("image_id", (len(image_ids),), np.int64)
     height_dset = output_h5.create_dataset("height", (len(image_ids),), np.float32)
     width_dset = output_h5.create_dataset("width", (len(image_ids),), np.float32)
+    num_boxes_dset = output_h5.create_dataset("num_boxes", (len(image_ids),), np.int64)
     boxes_dset = output_h5.create_dataset("boxes", (len(image_ids),), dt)
     features_dset = output_h5.create_dataset("features", (len(image_ids),), dt)
     scores_dset = output_h5.create_dataset("scores", (len(image_ids),), dt)
@@ -232,9 +236,9 @@ if __name__ == "__main__":
         force_boxes_json = json.load(open(_A.force_boxes))["annotations"]
 
         # Keep a map of image ID to force boxes.
-        force_boxes_map: Dict[str, Any] = {}
+        force_boxes_map = {}
         for annotation in force_boxes_json:
-            if annotation["image_id"] not in force_boxes:
+            if annotation["image_id"] not in force_boxes_map:
                 force_boxes_map[annotation["image_id"]] = [annotation]
             else:
                 force_boxes_map[annotation["image_id"]].append(annotation)
@@ -271,6 +275,7 @@ if __name__ == "__main__":
         image_id_dset[index] = features_dict["image_id"]
         height_dset[index] = features_dict["height"]
         width_dset[index] = features_dict["width"]
+        num_boxes_dset[index] = features_dict["num_boxes"]
         boxes_dset[index] = features_dict["boxes"].reshape(-1)
         features_dset[index] = features_dict["features"].reshape(-1)
 

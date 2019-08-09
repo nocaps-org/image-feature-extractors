@@ -14,6 +14,7 @@ RUN pip install Cython && \
     pip install contextlib2 && \
     pip install h5py jupyter jupyterlab matplotlib numpy pillow tqdm
 
+COPY . /workspace
 # Just create a directory to dump output files.
 RUN mkdir /outputs
 

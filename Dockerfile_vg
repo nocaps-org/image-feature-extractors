@@ -78,7 +78,15 @@ RUN pip install --trusted-host pypi.python.org \
   easydict \
   opencv-python
 
-COPY . /app
-WORKDIR /app/lib
-RUN python setup.py build_ext && python setup.py install
-WORKDIR /app
+COPY . /workspace
+WORKDIR /workspace/lib
+RUN python setup.py build_ext --inplace && python setup.py install
+ENV PYTHONPATH /workspace/lib:$PYTHONPATH
+
+# Just create a directory to dump output files.
+RUN mkdir /outputs
+
+# Expose a port for jupyter lab.
+EXPOSE 8880
+
+WORKDIR /workspace

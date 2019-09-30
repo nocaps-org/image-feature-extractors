@@ -207,7 +207,7 @@ def get_detections_from_im(
     # confidence score from this detector.
     if force_boxes is None:
         output_dict["scores"] = extracted_scores
-    
+
     return output_dict
 
 

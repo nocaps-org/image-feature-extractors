@@ -4,9 +4,12 @@ import os
 from typing import List, Tuple
 
 import numpy as np
-from PIL import Image
+from PIL import Image, ImageFile
 import tensorflow as tf
 from tqdm import tqdm
+
+# A couple of images are a bit large, we set this flag to load them properly.
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 
 parser = argparse.ArgumentParser()
@@ -103,14 +106,6 @@ if __name__ == "__main__":
             image = Image.open(image_path).convert("RGB")
             image_width, image_height = image.size
             image_ndarray = np.array(image)
-
-            #             if len(image_ndarray.shape) == 2:
-            #                 # Add RGB channel for single-channel grayscale images.
-            #                 image_ndarray = np.expand_dims(image_ndarray, axis=-1)
-            #                 image_ndarray = np.repeat(image_ndarray, 3, axis=-1)
-            #             elif image_ndarray.shape[2] == 4:
-            #                 # Drop alpha channel from RGB-A images.
-            #                 image_ndarray = image_ndarray[:, :, :3]
 
             # Run inference on image (add batch dimension first).
             output_dict = session.run(

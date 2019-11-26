@@ -114,15 +114,15 @@ def resize_larger_edge(
         if force_boxes is not None:
             # Normalize boxes between [0, 1] before resizing.
             # Boxes are of form [X1, Y1, X2, Y2]
-            force_boxes[:, 0] /= float(width)
-            force_boxes[:, 2] /= float(width)
-            force_boxes[:, 1] /= float(height)
-            force_boxes[:, 3] /= float(height)
+            force_boxes[:, 0] = force_boxes[:, 0] / float(width)
+            force_boxes[:, 2] = force_boxes[:, 2] / float(width)
+            force_boxes[:, 1] = force_boxes[:, 1] / float(height)
+            force_boxes[:, 3] = force_boxes[:, 3] / float(height)
 
         factor = image.shape[largest_side_index] / MAX_DIMENSION
         new_dimensions = [0, 0]
-        new_dimensions[np.mod(largest_side_index + 1, 2)] = (
-            image.shape[np.mod(largest_size_index + 1, 2)] / factor
+        new_dimensions[1 - largest_side_index] = int(
+            image.shape[1 - largest_side_index] / factor
         )
         new_dimensions[largest_side_index] = MAX_DIMENSION
 
@@ -131,10 +131,10 @@ def resize_larger_edge(
 
         if force_boxes is not None:
             # Unnormalize the boxes with new width and height.
-            force_boxes[:, 0] *= float(width)
-            force_boxes[:, 2] *= float(width)
-            force_boxes[:, 1] *= float(height)
-            force_boxes[:, 3] *= float(height)
+            force_boxes[:, 0] = force_boxes[:, 0] * float(width)
+            force_boxes[:, 2] = force_boxes[:, 2] * float(width)
+            force_boxes[:, 1] = force_boxes[:, 1] * float(height)
+            force_boxes[:, 3] = force_boxes[:, 3] * float(height)
 
     return image, force_boxes
 

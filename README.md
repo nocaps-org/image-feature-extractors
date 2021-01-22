@@ -39,7 +39,7 @@ Setting up this codebase requires Docker, so install it first. We provide two se
 
 1. **Download pre-trained models.**
     - `OI Detector`: download from [here](https://www.dropbox.com/s/uoai4xqfdx96q2c/faster_rcnn_inception_resnet_v2_atrous_oid_v4_2018.tar.gz) and un-tar it in `models` sub-directory.
-    - `VG Detector`: download from [here](https://www.dropbox.com/s/tr24q7h0zm2wnjv/resnet101_faster_rcnn_final.caffemodel) and place it in `models/vg_faster_rcnn_end2end` sub-directory.
+    - `VG Detector`: download from [here](https://www.dropbox.com/s/5xethd2nxa8qrnq/resnet101_faster_rcnn_final.caffemodel?dl=1) and place it in `models/vg_faster_rcnn_end2end` sub-directory.
 
 2. **Build docker image** (replace `<detector>` with `oi` or `vg` as per needs). If you wish to use only the `OI Detector`, you need not build the docker image for `VG Detector`.
 
